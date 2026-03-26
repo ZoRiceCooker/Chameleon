@@ -1,0 +1,108 @@
+struct TelemetrySnapshot
+    cpu_usage::Float64
+    mem_usage::Float64
+    timestamp::DateTime
+end
+abstract type MorphRule end
+
+struct CpuThresholdRule <: MorphRule
+    threshold::Float64
+    action::Function
+end
+using Dates
+
+struct ChameleonConfig
+    poll_interval_ms::Int
+    rules::Vector{MorphRule}
+end
+
+function start_chameleon(config::ChameleonConfig)
+    while true
+        snap = read_telemetry()
+        apply_rules(config.rules, snap)
+        sleep(config.poll_interval_ms / 1000)
+    end
+end
+module ChameleonOS
+
+using Dates
+
+"General telemetry snapshot"
+struct TelemetrySnapshot
+    cpu_usage::Float64
+    mem_usage::Float64
+    timestamp::DateTime
+end
+
+"Read telemetry (stub – you’d wire this to real APIs)"
+function read_telemetry()::TelemetrySnapshot
+    cpu = get_cpu_usage()      # TODO: implement via OS / library
+    mem = get_mem_usage()      # TODO: implement via OS / library
+    TelemetrySnapshot(cpu, mem, now())
+end
+
+"Abstract rule type"
+abstract type MorphRule end
+
+"Rule: when CPU > threshold, run an action"
+struct CpuThresholdRule <: MorphRule
+    threshold::Float64
+    action::Function
+end
+
+function apply_rule(rule::CpuThresholdRule, snap::TelemetrySnapshot)
+    if snap.cpu_usage > rule.threshold
+        rule.action(snap)
+    end
+end
+
+function apply_rules(rules::Vector{MorphRule}, snap::TelemetrySnapshot)
+    for r in rules
+        if r isa CpuThresholdRule
+            apply_rule(r::CpuThresholdRule, snap)
+        end
+        # extend with more rule types
+    end
+end
+
+"Windows Start Menu integration (conceptual)"
+function pin_app_to_start(app_path::String)
+    # Option 1: call PowerShell from Julia
+    # run(`powershell.exe -Command "Pin-AppToStart '$app_path'"`)
+    # Option 2: direct Win32/COM calls via ccall (more complex)
+end
+
+function launch_app(app_path::String)
+    # Example using Win32 ShellExecute via ccall
+    # ccall((:ShellExecuteW, "shell32"), ...)
+end
+
+"Main loop"
+struct ChameleonConfig
+    poll_interval_ms::Int
+    rules::Vector{MorphRule}
+end
+
+function start_chameleon(config::ChameleonConfig)
+    while true
+        snap = read_telemetry()
+        apply_rules(config.rules, snap)
+        sleep(config.poll_interval_ms / 1000)
+    end
+end
+
+end # module
+using .ChameleonOS
+
+high_cpu_rule = ChameleonOS.CpuThresholdRule(80.0) do snap
+    println("High CPU: $(snap.cpu_usage) – surfacing diagnostic tools")
+    ChameleonOS.pin_app_to_start("C:\\Windows\\System32\\Taskmgr.exe")
+    ChameleonOS.launch_app("C:\\Windows\\System32\\Taskmgr.exe")
+end
+
+config = ChameleonOS.ChameleonConfig(
+    2000,  # poll every 2 seconds
+    [high_cpu_rule]
+)
+
+ChameleonOS.start_chameleon(config)
